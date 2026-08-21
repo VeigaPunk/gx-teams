@@ -55,6 +55,18 @@ ensure_state_under_root() {
   # refuse if dest is STATE_ROOT itself (team empty/..)
   [[ "$dest" != "$root" ]] || die "state path must be under STATE_ROOT"
   mkdir -p "$STATE_ROOT/$team/inboxes"
+  mkdir -p "$STATE_ROOT/$team/godspeed"
+}
+
+write_godspeed() {
+  local team="$1" name="$2"
+  ensure_state_under_root "$team"
+  cat >"$STATE_ROOT/$team/godspeed/${name}.txt" <<'EOF'
+1. Name the axes.
+2. Iterate cheap, in parallel.
+3. Keep moves that improve any axis and harm none.
+4. Don't aim — let the frontier walk itself.
+EOF
 }
 
 record_pane() {
@@ -152,6 +164,7 @@ cmd_spawn() {
     sleep 0.05
   done
   record_pane "$team" "$name" "$pane" "$pid"
+  write_godspeed "$team" "$name"
   printf '%s %s %s\n' "$S" "$pane" "$pid"
 }
 

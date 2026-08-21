@@ -52,6 +52,22 @@ Mailbox is a JSONL **log** (O_APPEND). `dm` prints `sent` only if write succeeds
 bash scripts/gate-m04.sh   # expect GATE_M04_OK
 ```
 
+## M05 (shipped)
+
+Hardcap 16: 16×`cmd true`, 17th fails with `hardcap`, nuke `cap`, operators `0`/`1` pane_id:pid frozen.
+
+```bash
+bash scripts/gate-m05.sh   # expect GATE_M05_OK
+```
+
+## M06 (shipped)
+
+Two titled panes + godspeed 4-rule files on disk at spawn under `~/.gx-teams/<team>/godspeed/<name>.txt`. Both inboxes accept `dm`.
+
+```bash
+bash scripts/gate-m06.sh   # expect GATE_M06_OK
+```
+
 ## Steal / drop (from CC 2.1.32-era teams, not the 2.1.137 VSCode patch)
 
 **Steal:** OS process per pane; first spawn mkdir (no TeamCreate); JSON inbox with ack-on-write; identity in argv/env; `--no-leader` so panes do not share `~/.grok/leader.sock`.
