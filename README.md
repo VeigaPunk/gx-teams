@@ -74,6 +74,10 @@ bash scripts/gate-m06.sh   # expect GATE_M06_OK
 
 **Drop:** wrapping Claude Code; TeamCreate/TeamDelete; pane title as SSoT; `tmux send-keys` as the DM bus; `grok agent leader` as the teammate transport; in-process `spawn_subagent` as “teammate mode”.
 
+## M08 (xbgst hook pointer)
+
+Optional `/xbgst` `spawn_method: tmux-pane` hook lives in marketplace source only: `grok-marketplace/plugins/xbgst-stack/skills/xbgst/SKILL.md` (not `~/.grok/skills/xbgst` until judge ships/installs).
+
 ## Next
 
 Live DMs need ACP `session/prompt` — Grok 1.0.5 does not poll inbox files. Mailbox JSONL is the log only.
