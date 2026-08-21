@@ -28,12 +28,29 @@ bash scripts/gate-m02.sh   # expect GATE_M02_OK
 | Session | `gx-teams-<team>`, created with `new-session -d -s` (**never** `-t`, that is a session group) |
 | Target | exact `-t =gx-teams-<team>` (tmux prefix-matches without `=`) |
 | Pane handle | `#{pane_id}` (`%N`). **Never** `:0.0` |
-| Identity | env `GX_TEAM`, `GX_TEAMMATE_NAME`, `GX_TEAMMATE_ID=name@team` — **not** pane title |
+| Identity | env `GX_TEAM`, `GX_TEAMMATE_NAME`, `GX_TEAMMATE_ID=name@team`, `GX_PARENT_SESSION=<tmux session name>` — **not** pane title / `%N` |
 | Hardcap | 16 panes / session |
 | Cleanup | `nuke --team` only; **never** `kill-server` |
 | Deny | `claude`, `TeamCreate`, `--team 0\|1` |
 | Allowlist | `^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$` |
-| State | `~/.gx-teams/<team>/config.json` |
+| State | `~/.gx-teams/<team>/config.json` + `inboxes/<name>.jsonl` |
+
+## M03 (shipped)
+
+`GX_PARENT_SESSION` = spawning client's tmux **session name** (`display-message '#{session_name}'`), not pane id.
+
+```bash
+bash scripts/gate-m03.sh   # expect GATE_M03_OK
+```
+
+## M04 (shipped)
+
+Mailbox is a JSONL **log** (O_APPEND). `dm` prints `sent` only if write succeeds. Missing `inboxes/` → nonzero (no `mkdir -p` in `dm`).
+
+```bash
+./gx-teams.sh dm --team mail --to gx-labrat-ping --text hi
+bash scripts/gate-m04.sh   # expect GATE_M04_OK
+```
 
 ## Steal / drop (from CC 2.1.32-era teams, not the 2.1.137 VSCode patch)
 
@@ -41,9 +58,9 @@ bash scripts/gate-m02.sh   # expect GATE_M02_OK
 
 **Drop:** wrapping Claude Code; TeamCreate/TeamDelete; pane title as SSoT; `tmux send-keys` as the DM bus; `grok agent leader` as the teammate transport; in-process `spawn_subagent` as “teammate mode”.
 
-## Next (not in this tree yet)
+## Next
 
-Mailbox is a **log** (`~/.gx-teams/<team>/inboxes/<name>.jsonl`). Live DMs need ACP `session/prompt` — Grok 1.0.5 does not poll inbox files.
+Live DMs need ACP `session/prompt` — Grok 1.0.5 does not poll inbox files. Mailbox JSONL is the log only.
 
 ACP leftover (M07): `GROK_SUBAGENTS=0 grok agent --no-leader --always-approve stdio`  
 (`grok agent stdio --no-leader` clap-rejects.)

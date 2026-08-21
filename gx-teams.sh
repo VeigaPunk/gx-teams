@@ -11,6 +11,7 @@ usage() {
 Usage:
   gx-teams.sh spawn --team <team> --name <name> -- cmd <argv...>
   gx-teams.sh nuke  --team <team>
+  gx-teams.sh dm    --team <team> --to <name> --text <text>
 EOF
 }
 
@@ -53,6 +54,7 @@ ensure_state_under_root() {
   esac
   # refuse if dest is STATE_ROOT itself (team empty/..)
   [[ "$dest" != "$root" ]] || die "state path must be under STATE_ROOT"
+  mkdir -p "$STATE_ROOT/$team/inboxes"
 }
 
 record_pane() {
@@ -103,11 +105,15 @@ cmd_spawn() {
   local S T
   S=$(session_name "$team")
   T=$(starget "$S")
+  local parent=""
+  if [[ -n "${TMUX:-}" && -n "${TMUX_PANE:-}" ]]; then
+    parent=$(tmux display-message -t "$TMUX_PANE" -p '#{session_name}' 2>/dev/null || true)
+  fi
   local id_env=(
     -e "GX_TEAM=$team"
     -e "GX_TEAMMATE_NAME=$name"
     -e "GX_TEAMMATE_ID=${name}@${team}"
-    -e "GX_PARENT_SESSION=${TMUX_PANE:-}"
+    -e "GX_PARENT_SESSION=${parent}"
   )
 
   local meta pane pid
@@ -137,6 +143,14 @@ cmd_spawn() {
 
   tmux select-pane -t "$pane" -T "$name"
   tmux set-option -t "$pane" remain-on-exit on
+  # tmux -e can lag /proc/$pid/environ by a tick; gates read it immediately.
+  local _i
+  for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if tr '\0' '\n' < /proc/"$pid"/environ 2>/dev/null | grep -qx "GX_TEAM=${team}"; then
+      break
+    fi
+    sleep 0.05
+  done
   record_pane "$team" "$name" "$pane" "$pid"
   printf '%s %s %s\n' "$S" "$pane" "$pid"
 }
@@ -175,12 +189,51 @@ cmd_nuke() {
   printf 'nuked %s\n' "$S"
 }
 
+cmd_dm() {
+  local team="" to="" text=""
+  local have_text=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --team) team="${2:-}"; shift 2 ;;
+      --to) to="${2:-}"; shift 2 ;;
+      --text) text="${2:-}"; have_text=1; shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      *) die "unknown dm arg: $1" ;;
+    esac
+  done
+  validate_id team "$team"
+  validate_id name "$to"
+  refuse_operator_team "$team"
+  (( have_text )) || die "dm requires --text"
+  local inbox_dir="$STATE_ROOT/$team/inboxes"
+  # No mkdir here — missing dir must fail (never silent no-op).
+  [[ -d "$inbox_dir" ]] || die "missing inboxes dir for team $team"
+  local inbox="$inbox_dir/${to}.jsonl"
+  local ts id line
+  ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  if [[ -r /proc/sys/kernel/random/uuid ]]; then
+    id=$(< /proc/sys/kernel/random/uuid)
+  else
+    id="$(date -u +%s)-$$-$RANDOM"
+  fi
+  if command -v jq >/dev/null 2>&1; then
+    line=$(jq -nc --arg ts "$ts" --arg id "$id" --arg to "$to" --arg text "$text" \
+      '{ts:$ts,id:$id,from:"lead",to:$to,type:"dm",text:$text}')
+  else
+    die "jq required for dm JSON encode"
+  fi
+  # O_APPEND; print sent only if write succeeds
+  printf '%s\n' "$line" >>"$inbox" || die "dm write failed: $inbox"
+  printf 'sent\n'
+}
+
 main() {
   [[ $# -gt 0 ]] || { usage; exit 2; }
   local op="$1"; shift
   case "$op" in
     spawn) cmd_spawn "$@" ;;
     nuke)  cmd_nuke "$@" ;;
+    dm)    cmd_dm "$@" ;;
     -h|--help) usage ;;
     *) die "unknown op: $op" ;;
   esac
