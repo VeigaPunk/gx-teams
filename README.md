@@ -4,6 +4,15 @@ From-scratch Grok teammate harness. Same *shape* as Claude Code experimental age
 
 Grok Build 1.0.5 has no `teammateMode`. `spawn_subagent` is in-process (depth 1). This supervisor is the missing OS layer.
 
+## M_final (cheap all-green)
+
+Runs M01+M03+M04+M05+M06. Nukes leftovers. Asserts operators `0`/`1`. **Does not** run M02 (`grok -p`) or M07 (ACP).
+
+```bash
+bash scripts/gate-all.sh   # expect GX-TEAMS-GATE-OK
+./gx-teams.sh --help       # lists spawn / nuke / dm
+```
+
 ## M01 (shipped)
 
 One bash file. Detached named tmux session. Echo toy.
@@ -78,12 +87,16 @@ bash scripts/gate-m06.sh   # expect GATE_M06_OK
 
 Optional `/xbgst` `spawn_method: tmux-pane` hook lives in marketplace source only: `grok-marketplace/plugins/xbgst-stack/skills/xbgst/SKILL.md` (not `~/.grok/skills/xbgst` until judge ships/installs).
 
-## Next
+## M07 (optional ACP one-shot; not an M_final blocker)
 
-Live DMs need ACP `session/prompt` — Grok 1.0.5 does not poll inbox files. Mailbox JSONL is the log only.
+Piped `GROK_SUBAGENTS=0 grok agent --no-leader --always-approve stdio` (flags **before** `stdio`), JSON-RPC `initialize` (`protocolVersion: 1`), then kill. Cap 30s; hang → `Status: blocked E-acp` exit 2.
 
-ACP leftover (M07): `GROK_SUBAGENTS=0 grok agent --no-leader --always-approve stdio`  
-(`grok agent stdio --no-leader` clap-rejects.)
+```bash
+bash scripts/gate-m07.sh   # GATE_M07_OK or Status: blocked E-acp
+# wrong order clap-rejects: grok agent stdio --no-leader
+```
+
+Live DMs still need ACP `session/prompt` — mailbox JSONL is the log only.
 
 ## Routing probes (this host; evidence only)
 
@@ -97,3 +110,12 @@ This Grok pane often exports `CODEX_BIN=codex-titanium`. Stock Codex and Ali lan
 | Ali ds-pro | `codex exec -p ds-pro` | `XBGST_DSPRO0813_OK` | `evidence/ds-pro-cli.md` |
 
 Keys via `op run` (`BAILIAN_TOKEN_PLAN_API_KEY`). Never curl-as-proof. Never commit `.env`.
+
+## M_final
+
+Cheap smoke: M01 + M03–M06. Does **not** run M02 (`grok -p`) or M07 (ACP).
+
+```bash
+bash scripts/gate-all.sh   # expect GX-TEAMS-GATE-OK
+./gx-teams.sh --help       # spawn / nuke / dm
+```

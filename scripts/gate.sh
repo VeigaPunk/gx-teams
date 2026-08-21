@@ -6,9 +6,12 @@ GT="$ROOT/gx-teams.sh"
 S=gx-teams-toy
 T="=$S"
 
+cleanup() { "$GT" nuke --team toy >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+
 # cleanup leftover toy only (exact match — never prefix-hit toybox)
 if tmux has-session -t "$T" 2>/dev/null; then
-  tmux kill-session -t "$T"
+  "$GT" nuke --team toy
 fi
 
 out=$("$GT" spawn --team toy --name gx-labrat-ping -- cmd echo PING-OK)
