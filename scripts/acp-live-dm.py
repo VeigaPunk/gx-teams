@@ -412,6 +412,8 @@ def run_serve(args: argparse.Namespace) -> int:
             deadline,
         )
         protocol_version = init.get("protocolVersion")
+        if protocol_version is None:
+            raise RuntimeError(f"missing protocolVersion: {init}")
         new = client.request(
             "session/new",
             {
@@ -422,10 +424,8 @@ def run_serve(args: argparse.Namespace) -> int:
             deadline,
         )
         session_id = new.get("sessionId")
-        if protocol_version is None or not session_id:
-            raise RuntimeError(
-                f"serve bootstrap failed: protocolVersion={protocol_version} sessionId={session_id}"
-            )
+        if not session_id:
+            raise RuntimeError(f"missing sessionId: {new}")
         print(f"fifo={fifo_path}")
         print(f"log={log_path}")
         print(f"sessionId={session_id}")

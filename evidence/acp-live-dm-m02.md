@@ -6,7 +6,7 @@
 **Transport:** subprocess stdin/stdout JSON-RPC — never tmux key injection. Mailbox JSONL is log only.
 **ACP cwd:** `/tmp/gx-acp-livedm` (disposable; avoids 60s tool-tour hang on product tree)
 **Teammate:** team `acp` name `gx-labrat-acp` (godspeed on disk; pane = `true; exec sleep infinity`)
-**Spawn:** `gx-teams-acp %254 512210`
+**Spawn:** `gx-teams-acp %277 514857`
 **Connector:** pending (cdx-connector-r1 may land later)
 
 ## Protocol
@@ -14,11 +14,11 @@
 | Step | Value |
 |---|---|
 | protocolVersion | `1` |
-| session/new sessionId | `01a02648-cb7f-7392-a8b1-94bb41cbbb54` |
+| session/new sessionId | `01a0264a-c87f-7c41-a0fb-f3dd99b901f5` |
 | session/prompt | sent (godspeed quote) |
 | stopReason | `end_turn` |
-| session/update count | `88` |
-| elapsed_s: | `3.955` |
+| session/update count | `93` |
+| elapsed_s: | `4.049` |
 | Status: | `ok` |
 
 ## Godspeed prompt (quoted)
