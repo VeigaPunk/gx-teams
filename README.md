@@ -4,7 +4,7 @@ From-scratch Grok teammate harness. Same *shape* as Claude Code experimental age
 
 Grok Build 1.0.5 has no `teammateMode`. `spawn_subagent` is in-process (depth 1). This supervisor is the missing OS layer.
 
-## M01 (now)
+## M01 (shipped)
 
 One bash file. Detached named tmux session. Echo toy.
 
@@ -12,6 +12,15 @@ One bash file. Detached named tmux session. Echo toy.
 ./gx-teams.sh spawn --team toy --name gx-labrat-ping -- cmd echo PING-OK
 ./gx-teams.sh nuke  --team toy
 bash scripts/gate.sh   # expect GATE_OK; never kills operator sessions 0/1
+```
+
+## M02 (shipped)
+
+One real `grok -p` teammate in the mux. Flags before `-p`. Poll capture ≤90s. Operators `0`/`1` pane_id+pid frozen. Toy nuked.
+
+```bash
+bash scripts/gate-m02.sh   # expect GATE_M02_OK
+# evidence: evidence/m02-pong.md
 ```
 
 | Contract | Rule |
@@ -36,13 +45,18 @@ bash scripts/gate.sh   # expect GATE_OK; never kills operator sessions 0/1
 
 Mailbox is a **log** (`~/.gx-teams/<team>/inboxes/<name>.jsonl`). Live DMs need ACP `session/prompt` — Grok 1.0.5 does not poll inbox files.
 
-M02 overfit (one real Grok, flags **before** `-p`):
-
-```bash
-./gx-teams.sh spawn --team toy --name gx-labrat-ping -- \
-  cmd env GROK_SUBAGENTS=0 grok --no-leader --no-subagents --always-approve \
-  -p 'Reply with exactly: GX_TEAMMATE_PONG'
-```
-
 ACP leftover (M07): `GROK_SUBAGENTS=0 grok agent --no-leader --always-approve stdio`  
 (`grok agent stdio --no-leader` clap-rejects.)
+
+## Routing probes (this host; evidence only)
+
+This Grok pane often exports `CODEX_BIN=codex-titanium`. Stock Codex and Ali lanes **unset** it. Titanium stays sekhmet L3.
+
+| Lane | Command | Canary | Evidence |
+|---|---|---|---|
+| E2 revenger | `env -u CODEX_BIN codex exec -m gpt-5.6-luna` | `XBGST_CDX_REVENGER_OK` | `evidence/cdx-revenger.md` |
+| Ali qwen | `codex exec -p qwen38` | `XBGST_QWEN38_OK` | `evidence/qwen38-cli.md` |
+| Ali ds-flash | `codex exec -p ds-flash` | `XBGST_DSFLASH0731_OK` | `evidence/ds-flash-cli.md` |
+| Ali ds-pro | `codex exec -p ds-pro` | `XBGST_DSPRO0813_OK` | `evidence/ds-pro-cli.md` |
+
+Keys via `op run` (`BAILIAN_TOKEN_PLAN_API_KEY`). Never curl-as-proof. Never commit `.env`.
