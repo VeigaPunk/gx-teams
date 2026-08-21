@@ -1,0 +1,26 @@
+route_id: frontier-real-inner-live-dm-m03
+parent: gx-executor-inner-4ph
+task: |
+  You are PrimeAgent L2 (openai-codex gpt-5.4). NOT L1. NOT gx-*. Evidence only.
+  REAL work: inner xbgst 4-phase on gx-teams ACP live DM that already greened M02
+  (scripts/acp-live-dm.py lead-side client, elapsed_s 5.730).
+  Default stock `codex exec` (no -p, env -u CODEX_BIN) is the ChatGPT subscription.
+  Token Plan only via -p qwen38|ds-flash|ds-pro. Never titanium. Never /login.
+  Never canary. Never MUTATION SCORE. Never APPROVED/commit/push.
+scope: |
+  cwd: /tmp/xbgst-prime-*
+  read: /home/vgpnk/Projects/xbgst/gx-teams
+  write:
+    /home/vgpnk/Projects/xbgst/gx-teams/scripts/acp-live-dm.py
+    /home/vgpnk/Projects/xbgst/gx-teams/.xbgst/inner/live-dm/
+    /home/vgpnk/Projects/xbgst/gx-teams/.xbgst/gates/gate-frontier-m03.sh
+    /home/vgpnk/Projects/xbgst/gx-teams/evidence/acp-live-dm-m03.md
+  forbid: marketplace, ~/.codex, ~/.grok/skills, git commit, gx-teams.sh unless M04 pairing needs a tiny hook
+allowed_actions: |
+  tools on; child fan-out shell-only stock Codex env -u CODEX_BIN
+  connector children: -p qwen38
+  pondering children: stock codex exec (no -p) or -p ds-pro
+  speed probes: -p ds-flash of clap order / 60s cap on the live client
+  no --autonomous-as-scheduler
+return: inner 4-phase files + any real edits; no decisions
+stop: GATE_FRONTIER_M03 files exist OR Status: blocked; abort on APPROVED, titanium, canary, marketplace writes

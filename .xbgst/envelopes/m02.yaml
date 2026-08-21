@@ -1,0 +1,34 @@
+route_id: pure-intermodel-l2-2026-08-21-m02
+parent: gx-executor-inner-r01
+task: |
+  Overfit one inner xbgst stub. You are PrimeAgent L2 (openai-codex gpt-5.4), NOT gx-*, NOT the L1 judge.
+  Inner task (do not implement product): state whether gx-teams M07 live DM (ACP session/prompt) is the next unshipped slice, citing README.md mailbox JSONL line. Evidence-only.
+  You MUST yourself shell a live connector named cdx-connector-r1-inner:
+    env -u CODEX_BIN timeout 300s "$(CODEX_BIN= command -v codex)" exec -p qwen38
+    --skip-git-repo-check --ephemeral -C /tmp/xbgst-prime-conn-m02 -s read-only
+    with stdin from /dev/null, after `file` proves the binary is not ELF, after sourcing /tmp/xbgst-bailian.env (do not print secrets).
+  Do not adopt the L1 pre-flight as a substitute. Do not spawn Grok. Do not invoke titanium. Do not /login. Do not APPROVED/commit/push.
+scope: |
+  cwd: disposable /tmp/xbgst-prime-*
+  read: /home/vgpnk/Projects/xbgst/gx-teams/README.md, .xbgst/plans/, .xbgst/judge/, .xbgst/inner/r1-connector.md, .xbgst/inner/r1-critic.md
+  write: /home/vgpnk/Projects/xbgst/gx-teams/.xbgst/inner/r0-plan.md
+        /home/vgpnk/Projects/xbgst/gx-teams/.xbgst/inner/r1-propose.md
+        /home/vgpnk/Projects/xbgst/gx-teams/.xbgst/inner/r1-inner-connector.md
+        /home/vgpnk/Projects/xbgst/gx-teams/evidence/pure-intermodel-m02.md
+        /tmp/xbgst-prime-*
+  forbid: gx-teams.sh, scripts/, marketplace plugins, ~/.grok/skills, sekhmet, git commit, git push
+allowed_actions: |
+  child fan-out: shell-only stock Codex CLI with env -u CODEX_BIN
+  profiles allowed: qwen38 (connector, required), ds-flash (speed, optional), ds-pro (pondering, optional)
+  E2 luna only if you spawn a revenger (not required this tick)
+  never grok spawn_subagent, never sekhmet, never codex-titanium, never host pi
+  tools: shell, read, write under scope
+  --autonomous allowed as bounded worker (max-turns 16, max-tokens 400000, 30 min) — not an xbgst scheduler
+return: |
+  files listed in write scope; canary XBGST_CDX_CONNECTOR_R1_OK inside r1-inner-connector.md from the inner exec transcript;
+  evidence/pure-intermodel-m02.md records banner model: qwen3.8-max, env -u CODEX_BIN, non-ELF binary, inner_exec: yes
+  no decisions, no APPROVED
+stop: |
+  required files exist OR Status: blocked <reason>
+  abort on titanium, /login, banned types, marketplace writes, inner APPROVED, git push, Grok-swap of connector
+  two live qwen38 timeouts → Status: blocked E-qwen38 (do not swap connector)

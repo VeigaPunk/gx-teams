@@ -98,11 +98,17 @@ bash scripts/gate-m07.sh   # GATE_M07_OK or Status: blocked E-acp
 
 Live DMs still need ACP `session/prompt` — mailbox JSONL is the log only.
 
-## Routing probes (this host; evidence only)
+## Codex routing (this host; document, do not re-ping)
 
-This Grok pane often exports `CODEX_BIN=codex-titanium`. Stock Codex and Ali lanes **unset** it. Titanium stays sekhmet L3.
+This Grok pane often exports `CODEX_BIN=codex-titanium`. Stock Codex and Token Plan lanes **unset** it. Titanium stays sekhmet L3. Host `~/.codex` is **not** a git path.
 
-| Lane | Command | Canary | Evidence |
+**Default** stock `codex exec` (no `-p`, no `-m`) is the ChatGPT **subscription**. Token Plan is opt-in via profile: `-p qwen38` / `-p ds-flash` / `-p ds-pro`. Always `env -u CODEX_BIN`.
+
+Full write-up + user smoke citations (`SUB_SWITCH_OK`, `QWEN_STILL_OK`) + rollback recipe: `evidence/codex-sub-switch.md`.
+
+Historical Token Plan / E2 CLI canaries (already shipped; do not add new pings):
+
+| Lane | Command | Historical canary | Evidence |
 |---|---|---|---|
 | E2 revenger | `env -u CODEX_BIN codex exec -m gpt-5.6-luna` | `XBGST_CDX_REVENGER_OK` | `evidence/cdx-revenger.md` |
 | Ali qwen | `codex exec -p qwen38` | `XBGST_QWEN38_OK` | `evidence/qwen38-cli.md` |

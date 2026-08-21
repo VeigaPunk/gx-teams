@@ -1,0 +1,16 @@
+route_id: pure-intermodel-l2-2026-08-21-m01
+parent: gx-labrat-l2tick
+task: One print-tick canary proving openai-codex L2 is alive. Reply with exactly XBGST_PURE_INTERMODEL_L2_OK. Do not implement. Do not judge. Do not ship.
+scope: |
+  cwd: disposable /tmp/xbgst-prime-* only
+  read: envelope text in the prompt
+  write: none
+  forbid: grok-marketplace/plugins, ~/.grok/skills, sekhmet-l3, installed-plugins, gx-teams source, git commit
+allowed_actions: |
+  prime-agent --provider openai-codex --model gpt-5.4 --thinking minimal --no-tools --no-session
+  child fan-out: none
+  no shell, no git, no /login, no titanium
+return: stdout canary XBGST_PURE_INTERMODEL_L2_OK to parent gx-labrat-l2tick; evidence markdown; no decisions
+stop: |
+  canary hit OR Status: blocked <reason>
+  abort on titanium, /login, banned types, marketplace writes, inner APPROVED, wall 120s

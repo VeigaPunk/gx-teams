@@ -1,0 +1,22 @@
+route_id: pure-intermodel-l2-2026-08-21-m03
+parent: gx-executor-inner-4ph
+task: |
+  Widen phase coverage only on the same stub (ACP session/prompt vs mailbox JSONL).
+  Write inner CROSS-CRITIQUE, inner-pareto, COMPILE. Do not ship. Do not overwrite
+  r1-connector.md (V baseline) or r1-critic.md (L1 ACH) or r1-inner-connector.md.
+scope: |
+  write:
+    /home/vgpnk/Projects/xbgst/gx-teams/.xbgst/inner/r1-critique.md
+    /home/vgpnk/Projects/xbgst/gx-teams/.xbgst/inner/r1-pareto.md
+    /home/vgpnk/Projects/xbgst/gx-teams/.xbgst/inner/r1-compile.md
+    /home/vgpnk/Projects/xbgst/gx-teams/evidence/pure-intermodel-m03.md
+  read: existing inner r0-plan, r1-propose, r1-connector, r1-inner-connector, README
+  forbid: gx-teams.sh, scripts, marketplace, git commit, APPROVED
+allowed_actions: |
+  child fan-out: shell-only stock Codex env -u CODEX_BIN
+  pondering children: ds-pro or openai-codex
+  speed children: ds-flash
+  connector if you need another PROPOSE pass: qwen38 only
+  no --autonomous, no titanium, no Grok spawn
+return: the three files + evidence markdown; no decisions
+stop: files exist OR Status: blocked; abort on APPROVED, git push, titanium, marketplace writes

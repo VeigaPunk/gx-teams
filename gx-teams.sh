@@ -235,8 +235,15 @@ cmd_dm() {
   else
     die "jq required for dm JSON encode"
   fi
-  # O_APPEND; print sent only if write succeeds
+  # O_APPEND; print sent only if write succeeds. JSONL remains the log.
   printf '%s\n' "$line" >>"$inbox" || die "dm write failed: $inbox"
+  # Optional ACP fire: fail-fast send if a live fifo exists. Missing fifo ≠ fail.
+  local fifo="$STATE_ROOT/$team/live-dm/${to}.fifo"
+  if [[ -p "$fifo" ]]; then
+    local here
+    here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    python3 "$here/scripts/acp-live-dm.py" send --fifo "$fifo" --text "$text" >/dev/null 2>&1 || true
+  fi
   printf 'sent\n'
 }
 
