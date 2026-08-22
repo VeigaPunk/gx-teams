@@ -44,7 +44,7 @@ bash scripts/gate-m02.sh   # expect GATE_M02_OK
 | Deny | `claude`, `TeamCreate`, `--team 0\|1` |
 | Allowlist | `^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$` |
 | State | `~/.gx-teams/<team>/config.json` + `inboxes/<name>.jsonl` (disk persist) |
-| Scratch | pane `TMPDIR=/tmp/xbgst-gx-<team>-<name>-XXXXXX`; `XBRD_SPARK_ROOT=$TMPDIR/spark`; `XBGST_MAIL_ROOT=$TMPDIR/mail`. Never JSONL bodies on `$XDG_RUNTIME_DIR`. |
+| Scratch | pane `TMPDIR=/tmp/xbgst-gx-<team>-<name>-XXXXXX`; `XBGST_MAIL_ROOT=$TMPDIR/mail`. `XBRD_SPARK_ROOT=$TMPDIR/spark` **only** when argv has `--spark`/`--spk`/`--substrate sekhmet`/`sekhmet`. PATH includes `~/.local/bin` so `xask` reaches grok/kimi/qwen/stock cdx. Never JSONL bodies on `$XDG_RUNTIME_DIR`. |
 | Serde | crate `mailbox/` (`xbgst-mailbox`) append/last/gc-scratch. Live `dm` stays jq. Do **not** GC `fnm_multishells`. |
 
 ## M03 (shipped)

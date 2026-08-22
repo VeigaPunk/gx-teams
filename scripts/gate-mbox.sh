@@ -36,10 +36,26 @@ print(td)
 PY
 )
 pid=$(jq -r '.panes["gx-labrat-mbox"].pane_pid' "$cfg")
-tr '\0' '\n' < /proc/"$pid"/environ | grep -qx "XBRD_SPARK_ROOT=${td}/spark"
 tr '\0' '\n' < /proc/"$pid"/environ | grep -qx "XBGST_MAIL_ROOT=${td}/mail"
-test -d "${td}/spark"
+if tr '\0' '\n' < /proc/"$pid"/environ | grep -q '^XBRD_SPARK_ROOT='; then
+  echo 'FAIL: spark root set without --spark argv' >&2
+  exit 1
+fi
 test -d "${td}/mail"
+test ! -e "${td}/spark"
+"$GT" spawn --team mboxgate --name gx-labrat-spark -- cmd true --spark
+spark_cfg="$cfg"
+spark_td=$(python3 - "$spark_cfg" <<'PY'
+import json,sys
+cfg=json.load(open(sys.argv[1]))
+td=cfg["panes"]["gx-labrat-spark"]["tmpdir"]
+assert td.startswith("/tmp/xbgst-gx-mboxgate-gx-labrat-spark-"), td
+print(td)
+PY
+)
+spark_pid=$(jq -r '.panes["gx-labrat-spark"].pane_pid' "$spark_cfg")
+tr '\0' '\n' < /proc/"$spark_pid"/environ | grep -qx "XBRD_SPARK_ROOT=${spark_td}/spark"
+test -d "${spark_td}/spark"
 inbox_dir="${GX_TEAMS_STATE:-$HOME/.gx-teams}/mboxgate/inboxes"
 "$GT" dm --team mboxgate --to gx-labrat-mbox --text hi
 inbox="$inbox_dir/gx-labrat-mbox.jsonl"

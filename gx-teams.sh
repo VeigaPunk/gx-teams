@@ -117,6 +117,22 @@ refuse_operator_team() {
   esac
 }
 
+# Spark/sekhmet namespaces only when argv asks. Other CLIs (grok/kimi/qwen/xask stock) do not get XBRD_SPARK_ROOT.
+argv_wants_spark() {
+  local i=0
+  local -a a=("$@")
+  for ((i = 0; i < ${#a[@]}; i++)); do
+    case "${a[$i]}" in
+      --spark|--spk|sekhmet) return 0 ;;
+      --substrate)
+        (( i + 1 < ${#a[@]} )) || continue
+        [[ "${a[$((i + 1))]}" == sekhmet ]] && return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
 session_name() { printf 'gx-teams-%s' "$1"; }
 
 # Exact session target (tmux prefix-matches without =).
@@ -246,14 +262,24 @@ cmd_spawn() {
   local tmpdir spark_root mail_root
   tmpdir=$(mktemp -d -- "/tmp/xbgst-gx-${team}-${name}-XXXXXX") || die "mktemp TMPDIR failed"
   trap 'rm -rf -- "$tmpdir"' EXIT RETURN
-  spark_root="${tmpdir}/spark"
   mail_root="${tmpdir}/mail"
-  mkdir -m 0700 -- "$spark_root" "$mail_root" || die "mkdir pane spark/mail failed"
-  local qtd qsr qmr
+  mkdir -m 0700 -- "$mail_root" || die "mkdir pane mail failed"
+  spark_root=""
+  if argv_wants_spark "${command_argv[@]}"; then
+    spark_root="${tmpdir}/spark"
+    mkdir -m 0700 -- "$spark_root" || die "mkdir pane spark failed"
+  fi
+  local qtd qmr qpath
   qtd=$(printf '%q' "$tmpdir")
-  qsr=$(printf '%q' "$spark_root")
   qmr=$(printf '%q' "$mail_root")
-  inner="export TMPDIR=${qtd} XBRD_SPARK_ROOT=${qsr} XBGST_MAIL_ROOT=${qmr}; trap 'rm -rf -- ${qtd}' EXIT; ${user_cmd}; exec sleep infinity"
+  qpath=$(printf '%q' "${HOME}/.local/bin:/usr/bin:/bin${PATH:+:$PATH}")
+  inner="export PATH=${qpath}; export TMPDIR=${qtd} XBGST_MAIL_ROOT=${qmr}"
+  if [[ -n "$spark_root" ]]; then
+    inner+=" XBRD_SPARK_ROOT=$(printf '%q' "$spark_root")"
+  else
+    inner+="; unset XBRD_SPARK_ROOT"
+  fi
+  inner+="; trap 'rm -rf -- ${qtd}' EXIT; ${user_cmd}; exec sleep infinity"
 
   local parent=""
   if [[ -n "${TMUX:-}" && -n "${TMUX_PANE:-}" ]]; then
@@ -265,9 +291,11 @@ cmd_spawn() {
     -e "GX_TEAMMATE_ID=${name}@${team}"
     -e "GX_PARENT_SESSION=${parent}"
     -e "TMPDIR=${tmpdir}"
-    -e "XBRD_SPARK_ROOT=${spark_root}"
     -e "XBGST_MAIL_ROOT=${mail_root}"
   )
+  if [[ -n "$spark_root" ]]; then
+    id_env+=(-e "XBRD_SPARK_ROOT=${spark_root}")
+  fi
 
   local meta pane pid
   if tmux has-session -t "$T" 2>/dev/null; then
