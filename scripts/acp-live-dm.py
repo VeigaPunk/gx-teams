@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import hashlib
 import json
 import os
 import select
@@ -31,6 +32,8 @@ NAME = "gx-labrat-acp"
 EVIDENCE = ROOT / "evidence" / "acp-live-dm-m02.md"
 PROMPT_BUDGET_S = 60.0
 ACP_CWD = Path("/tmp/gx-acp-livedm")
+GODSPEED_SHA256 = "db88963cbdf5a0db22b460b284bf6f1d1f4abac9eaadb28bdb5e9bffe27be3bb"
+GODSPEED_SUFFIX = "| godspeed"
 
 
 def die(msg: str, code: int = 1) -> None:
@@ -92,10 +95,29 @@ def read_godspeed() -> str:
     path = STATE_ROOT / TEAM / "godspeed" / f"{NAME}.txt"
     if not path.is_file():
         die(f"missing godspeed: {path}")
-    text = path.read_text(encoding="utf-8").strip()
-    if "Name the axes" not in text:
-        die(f"godspeed missing axes rule: {path}")
-    return text
+    payload = path.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    if digest != GODSPEED_SHA256:
+        die(f"non-canonical godspeed: {path} (sha256 {digest})")
+    return payload.decode("utf-8")
+
+
+def strip_terminal_godspeed(text: str) -> str:
+    body = text.rstrip()
+    while body.endswith(GODSPEED_SUFFIX):
+        body = body[: -len(GODSPEED_SUFFIX)].rstrip()
+    return body
+
+
+def build_prompt(base_text: str, include_rules: bool = True) -> str:
+    """Build every initial/follow-up prompt from the byte-exact directive."""
+    del include_rules  # compatibility only; Godspeed is no longer optional
+    directive = read_godspeed()
+    body = base_text
+    while body.startswith(directive):
+        body = body[len(directive) :].lstrip("\r\n")
+    body = strip_terminal_godspeed(body)
+    return f"{directive}\n{body}\n{GODSPEED_SUFFIX}"
 
 
 def write_evidence(body: str) -> None:
@@ -265,12 +287,10 @@ class AcpClient:
 def run_lead_probe() -> int:
     t0 = time.monotonic()
     spawn_meta = spawn_teammate()
-    godspeed = read_godspeed()
     ACP_CWD.mkdir(parents=True, exist_ok=True)
-    prompt_text = (
+    prompt_text = build_prompt(
         "Teammate instruction — quote these Godspeed rules back verbatim, "
-        "then stop. Do not use tools.\n"
-        + godspeed
+        "then stop. Do not use tools."
     )
 
     client = AcpClient()
@@ -377,14 +397,6 @@ def run_lead_probe() -> int:
     return 0
 
 
-def build_prompt(base_text: str, include_rules: bool) -> str:
-    text = base_text.rstrip("\n")
-    if not include_rules:
-        return text
-    godspeed = read_godspeed()
-    return f"{text}\n\nGodspeed rules:\n{godspeed}"
-
-
 def run_serve(args: argparse.Namespace) -> int:
     fifo_path = Path(args.fifo)
     log_path = Path(args.log)
@@ -447,7 +459,7 @@ def run_serve(args: argparse.Namespace) -> int:
             prompt_in = line.rstrip("\r")
             if not prompt_in:
                 continue
-            prompt_text = build_prompt(prompt_in, args.rules)
+            prompt_text = build_prompt(prompt_in)
             started = time.monotonic()
             status = "ok"
             stop_reason = None
@@ -474,7 +486,7 @@ def run_serve(args: argparse.Namespace) -> int:
                 "fifo": str(fifo_path),
                 "sessionId": session_id,
                 "prompt": prompt_in,
-                "rules": bool(args.rules),
+                "rules": True,
                 "stopReason": stop_reason,
                 "status": status,
                 "elapsed_s": round(time.monotonic() - started, 3),
@@ -528,7 +540,11 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--log", default=str(default_log_path()))
     serve.add_argument("--cwd", default=str(ACP_CWD))
     serve.add_argument("--cap", type=float, default=PROMPT_BUDGET_S)
-    serve.add_argument("--rules", action="store_true")
+    serve.add_argument(
+        "--rules",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     serve.add_argument("--once", action="store_true")
 
     send = sub.add_parser("send", help="send one prompt into a live FIFO")

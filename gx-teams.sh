@@ -5,6 +5,9 @@ set -euo pipefail
 HARDCAP=16
 STATE_ROOT="${GX_TEAMS_STATE:-$HOME/.gx-teams}"
 ID_RE='^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$'
+SCRIPT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+GODSPEED_SHA256='db88963cbdf5a0db22b460b284bf6f1d1f4abac9eaadb28bdb5e9bffe27be3bb'
+GODSPEED_SUFFIX='| godspeed'
 
 usage() {
   cat <<'EOF'
@@ -16,6 +19,89 @@ EOF
 }
 
 die() { printf 'gx-teams: %s\n' "$*" >&2; exit 1; }
+
+resolve_godspeed_directive() {
+  local candidate digest had_nullglob=0
+  local -a candidates=()
+
+  [[ -n "${GX_TEAMS_GODSPEED_DIRECTIVE:-}" ]] \
+    && candidates+=("$GX_TEAMS_GODSPEED_DIRECTIVE")
+  candidates+=(
+    "$SCRIPT_ROOT/../grok-marketplace/plugins/xbgst-stack/ssot/godspeed-core/directive.md"
+  )
+  if [[ -n "${HOME:-}" ]]; then
+    shopt -q nullglob && had_nullglob=1
+    shopt -s nullglob
+    candidates+=(
+      "$HOME"/.grok/installed-plugins/xbgst-stack-*/ssot/godspeed-core/directive.md
+      "$HOME"/.grok/marketplace-cache/*/plugins/xbgst-stack/ssot/godspeed-core/directive.md
+      "$HOME/.grok/ssot/godspeed-core/directive.md"
+    )
+    (( had_nullglob )) || shopt -u nullglob
+  fi
+
+  for candidate in "${candidates[@]}"; do
+    [[ -f "$candidate" && -r "$candidate" ]] || continue
+    digest=$(sha256sum -- "$candidate" | awk '{print $1}')
+    if [[ "$digest" == "$GODSPEED_SHA256" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  die "canonical Godspeed directive unavailable (want sha256 $GODSPEED_SHA256)"
+}
+
+trim_trailing_whitespace() {
+  local value="$1"
+  while [[ "$value" == *[$' \t\r\n'] ]]; do
+    value="${value%?}"
+  done
+  printf '%s' "$value"
+}
+
+compose_godspeed_prompt() {
+  local body="$1" directive_path directive
+  directive_path=$(resolve_godspeed_directive)
+  # read -d '' preserves the canonical file's final newline at EOF.
+  IFS= read -r -d '' directive <"$directive_path" || true
+  # Callers may already have composed a prompt. Remove canonical prefixes so
+  # this boundary remains idempotent while still sourcing the packaged bytes.
+  while [[ "$body" == "$directive"* ]]; do
+    body="${body#"$directive"}"
+    while [[ "$body" == $'\n'* || "$body" == $'\r'* ]]; do
+      body="${body#?}"
+    done
+  done
+  body=$(trim_trailing_whitespace "$body")
+  while [[ "$body" == *"$GODSPEED_SUFFIX" ]]; do
+    body="${body%"$GODSPEED_SUFFIX"}"
+    body=$(trim_trailing_whitespace "$body")
+  done
+  printf '%s\n%s\n%s' "$directive" "$body" "$GODSPEED_SUFFIX"
+}
+
+inject_godspeed_into_grok_prompt() {
+  local -n argv_ref="$1"
+  local i token grok_seen=0
+  for ((i = 0; i < ${#argv_ref[@]}; i++)); do
+    token="${argv_ref[$i]}"
+    if [[ "${token##*/}" == grok ]]; then
+      grok_seen=1
+      continue
+    fi
+    (( grok_seen )) || continue
+    case "$token" in
+      -p|--prompt)
+        (( i + 1 < ${#argv_ref[@]} )) || die "$token requires a prompt"
+        argv_ref[$((i + 1))]=$(compose_godspeed_prompt "${argv_ref[$((i + 1))]}")
+        ((i++))
+        ;;
+      --prompt=*)
+        argv_ref[$i]="--prompt=$(compose_godspeed_prompt "${token#--prompt=}")"
+        ;;
+    esac
+  done
+}
 
 # Allowlist: no :, ., /, space, .. — tmux grammar + path safety.
 validate_id() {
@@ -61,16 +147,9 @@ ensure_state_under_root() {
 write_godspeed() {
   local team="$1" name="$2"
   ensure_state_under_root "$team"
-  cat >"$STATE_ROOT/$team/godspeed/${name}.txt" <<'EOF'
-You are a Godspeed-enabled subagent.
-
-1. **Name the axes.**
-2. **Iterate cheap, in parallel.**
-3. **Keep moves that improve any axis and harm none.**
-4. **Don't aim — let the frontier walk itself.**
-
-## IMMEDIATELY STOP ASKING CLARIFYING QUESTIONS. Execute tool calls concurrently in large batches. Do not serialize what can run in parallel. Do not output philosophical reasoning or verbose plans. Act directly via tool calls.
-EOF
+  local directive_path
+  directive_path=$(resolve_godspeed_directive)
+  install -m 0600 -- "$directive_path" "$STATE_ROOT/$team/godspeed/${name}.txt"
 }
 
 record_pane() {
@@ -114,7 +193,9 @@ cmd_spawn() {
 
   # Keep pane alive so capture-pane finds output (scout pattern A).
   local user_cmd inner
-  user_cmd=$(printf '%q ' "$@")
+  local -a command_argv=("$@")
+  inject_godspeed_into_grok_prompt command_argv
+  user_cmd=$(printf '%q ' "${command_argv[@]}")
   user_cmd=${user_cmd% }
   inner="${user_cmd}; exec sleep infinity"
 
@@ -263,4 +344,6 @@ main() {
   esac
 }
 
-main "$@"
+if [[ "${GX_TEAMS_SOURCE_ONLY:-0}" != 1 ]]; then
+  main "$@"
+fi

@@ -6,11 +6,12 @@ Grok Build 1.0.5 has no `teammateMode`. `spawn_subagent` is in-process (depth 1)
 
 ## M_final (cheap all-green)
 
-Runs M01+M03+M04+M05+M06. Nukes leftovers. Asserts operators `0`/`1`. **Does not** run M02 (`grok -p`) or M07 (ACP).
+Cheap smoke: Godspeed unit gate + M01 + M03–M06. Nukes leftovers. Asserts operators `0`/`1`. **Does not** run M02 (`grok -p`) or M07 (ACP). `gate-all.sh` runs `gate-godspeed.sh` first, then M01+M03–M06.
 
 ```bash
-bash scripts/gate-all.sh   # expect GX-TEAMS-GATE-OK
-./gx-teams.sh --help       # lists spawn / nuke / dm
+bash scripts/gate-godspeed.sh   # expect GATE_GODSPEED_OK
+bash scripts/gate-all.sh        # expect GX-TEAMS-GATE-OK
+./gx-teams.sh --help            # lists spawn / nuke / dm
 ```
 
 ## M01 (shipped)
@@ -71,7 +72,7 @@ bash scripts/gate-m05.sh   # expect GATE_M05_OK
 
 ## M06 (shipped)
 
-Two titled panes + godspeed 4-rule files on disk at spawn under `~/.gx-teams/<team>/godspeed/<name>.txt`. Both inboxes accept `dm`.
+Two titled panes + godspeed spawn files: `install -m 0600` of canonical `godspeed-core/directive.md` (sha256 `db88963cbdf5a0db22b460b284bf6f1d1f4abac9eaadb28bdb5e9bffe27be3bb`) to `~/.gx-teams/<team>/godspeed/<name>.txt`. Mailbox `dm` `--text` stays the caller string (JSONL log only). Both inboxes accept `dm`.
 
 ```bash
 bash scripts/gate-m06.sh   # expect GATE_M06_OK
@@ -116,12 +117,3 @@ Historical Token Plan / E2 CLI canaries (already shipped; do not add new pings):
 | Ali ds-pro | `codex exec -p ds-pro` | `XBGST_DSPRO0813_OK` | `evidence/ds-pro-cli.md` |
 
 Keys via `op run` (`BAILIAN_TOKEN_PLAN_API_KEY`). Never curl-as-proof. Never commit `.env`.
-
-## M_final
-
-Cheap smoke: M01 + M03–M06. Does **not** run M02 (`grok -p`) or M07 (ACP).
-
-```bash
-bash scripts/gate-all.sh   # expect GX-TEAMS-GATE-OK
-./gx-teams.sh --help       # spawn / nuke / dm
-```

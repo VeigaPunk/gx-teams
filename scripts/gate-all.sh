@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M_final cheap gate: M01+M03+M04+M05+M06. Not M02 (grok -p), not M07 (ACP).
+# M_final cheap gate: Godspeed + M01+M03+M04+M05+M06. Not M02 (grok -p), not M07 (ACP).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GT="$ROOT/gx-teams.sh"
@@ -25,6 +25,7 @@ trap nuke_leftovers EXIT
 assert_operators
 nuke_leftovers
 
+bash scripts/gate-godspeed.sh
 bash scripts/gate.sh
 bash scripts/gate-m03.sh
 bash scripts/gate-m04.sh
