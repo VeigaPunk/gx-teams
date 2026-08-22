@@ -130,9 +130,11 @@ pane_count() {
 ensure_state_under_root() {
   local team="$1"
   mkdir -p "$STATE_ROOT"
+  [[ ! -L "$STATE_ROOT" ]] || die "refusing symlink STATE_ROOT"
   local root dest
   root=$(realpath "$STATE_ROOT")
   mkdir -p "$STATE_ROOT/$team"
+  [[ ! -L "$STATE_ROOT/$team" ]] || die "refusing symlink team state"
   dest=$(realpath "$STATE_ROOT/$team")
   case "$dest" in
     "$root"|"$root"/*) ;;
@@ -157,12 +159,44 @@ record_pane() {
   ensure_state_under_root "$team"
   local dir="$STATE_ROOT/$team"
   local cfg="$dir/config.json"
-  if command -v jq >/dev/null 2>&1 && [[ -f "$cfg" ]]; then
-    jq --arg n "$name" --arg p "$pane" --arg pid "$pid" \
-      '.panes[$n]={pane_id:$p,pane_pid:$pid}' "$cfg" >"$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+  local tmpdir="${5:-}"
+  local lock="$dir/config.lock"
+  write_cfg() {
+    local tmp src
+    tmp=$(mktemp -- "$dir/config.json.XXXXXX") || die "mktemp config failed"
+    if [[ -f "$cfg" ]]; then
+      src="$cfg"
+    else
+      printf '{"team":"%s","panes":{}}\n' "$team" >"$tmp.empty"
+      src="$tmp.empty"
+    fi
+    if command -v jq >/dev/null 2>&1; then
+      if [[ -n "$tmpdir" ]]; then
+        jq --arg n "$name" --arg p "$pane" --arg pid "$pid" --arg td "$tmpdir" \
+          '.panes[$n]={pane_id:$p,pane_pid:$pid,tmpdir:$td}' "$src" >"$tmp"
+      else
+        jq --arg n "$name" --arg p "$pane" --arg pid "$pid" \
+          '.panes[$n]={pane_id:$p,pane_pid:$pid}' "$src" >"$tmp"
+      fi
+    else
+      if [[ -n "$tmpdir" ]]; then
+        printf '{"team":"%s","panes":{"%s":{"pane_id":"%s","pane_pid":"%s","tmpdir":"%s"}}}\n' \
+          "$team" "$name" "$pane" "$pid" "$tmpdir" >"$tmp"
+      else
+        printf '{"team":"%s","panes":{"%s":{"pane_id":"%s","pane_pid":"%s"}}}\n' \
+          "$team" "$name" "$pane" "$pid" >"$tmp"
+      fi
+    fi
+    mv -f -- "$tmp" "$cfg"
+    rm -f -- "$tmp.empty"
+  }
+  if command -v flock >/dev/null 2>&1; then
+    (
+      flock 9
+      write_cfg
+    ) 9>"$lock"
   else
-    printf '{"team":"%s","panes":{"%s":{"pane_id":"%s","pane_pid":"%s"}}}\n' \
-      "$team" "$name" "$pane" "$pid" >"$cfg"
+    write_cfg
   fi
 }
 
@@ -197,11 +231,30 @@ cmd_spawn() {
   inject_godspeed_into_grok_prompt command_argv
   user_cmd=$(printf '%q ' "${command_argv[@]}")
   user_cmd=${user_cmd% }
-  inner="${user_cmd}; exec sleep infinity"
 
   local S T
   S=$(session_name "$team")
   T=$(starget "$S")
+  if tmux has-session -t "$T" 2>/dev/null; then
+    local n
+    n=$(pane_count "$S")
+    if (( n >= HARDCAP )); then
+      die "hardcap $HARDCAP: session $S already has $n panes"
+    fi
+  fi
+
+  local tmpdir spark_root mail_root
+  tmpdir=$(mktemp -d -- "/tmp/xbgst-gx-${team}-${name}-XXXXXX") || die "mktemp TMPDIR failed"
+  trap 'rm -rf -- "$tmpdir"' EXIT RETURN
+  spark_root="${tmpdir}/spark"
+  mail_root="${tmpdir}/mail"
+  mkdir -m 0700 -- "$spark_root" "$mail_root" || die "mkdir pane spark/mail failed"
+  local qtd qsr qmr
+  qtd=$(printf '%q' "$tmpdir")
+  qsr=$(printf '%q' "$spark_root")
+  qmr=$(printf '%q' "$mail_root")
+  inner="export TMPDIR=${qtd} XBRD_SPARK_ROOT=${qsr} XBGST_MAIL_ROOT=${qmr}; trap 'rm -rf -- ${qtd}' EXIT; ${user_cmd}; exec sleep infinity"
+
   local parent=""
   if [[ -n "${TMUX:-}" && -n "${TMUX_PANE:-}" ]]; then
     parent=$(tmux display-message -t "$TMUX_PANE" -p '#{session_name}' 2>/dev/null || true)
@@ -211,15 +264,13 @@ cmd_spawn() {
     -e "GX_TEAMMATE_NAME=$name"
     -e "GX_TEAMMATE_ID=${name}@${team}"
     -e "GX_PARENT_SESSION=${parent}"
+    -e "TMPDIR=${tmpdir}"
+    -e "XBRD_SPARK_ROOT=${spark_root}"
+    -e "XBGST_MAIL_ROOT=${mail_root}"
   )
 
   local meta pane pid
   if tmux has-session -t "$T" 2>/dev/null; then
-    local n
-    n=$(pane_count "$S")
-    if (( n >= HARDCAP )); then
-      die "hardcap $HARDCAP: session $S already has $n panes"
-    fi
     meta=$(tmux new-window -t "$T" -d -P \
       -F '#{window_id} #{pane_id} #{pane_pid}' \
       -n "$name" \
@@ -248,7 +299,8 @@ cmd_spawn() {
     fi
     sleep 0.05
   done
-  record_pane "$team" "$name" "$pane" "$pid"
+  record_pane "$team" "$name" "$pane" "$pid" "$tmpdir"
+  trap - EXIT RETURN
   write_godspeed "$team" "$name"
   printf '%s %s %s\n' "$S" "$pane" "$pid"
 }
@@ -264,13 +316,35 @@ cmd_nuke() {
   done
   validate_id team "$team"
   refuse_operator_team "$team"
-  local S T
+  local S T cfg
   S=$(session_name "$team")
   T=$(starget "$S")
+  cfg="$STATE_ROOT/$team/config.json"
+  # Snapshot pane tmpdirs before kill-session so a concurrent spawn after
+  # kill is not in the allowlist.
+  local -a snapshot=()
+  if [[ -f "$cfg" ]] && command -v jq >/dev/null 2>&1; then
+    local td
+    while IFS= read -r td; do
+      snapshot+=("$td")
+    done < <(jq -r '.panes[]? | .tmpdir // empty' "$cfg")
+  fi
   # Never kill-server. Never touch operator sessions 0/1.
   if tmux has-session -t "$T" 2>/dev/null; then
     tmux kill-session -t "$T"
   fi
+  local prefix="/tmp/xbgst-gx-${team}-"
+  local td
+  for td in "${snapshot[@]}"; do
+    [[ -n "$td" && "$td" != "null" ]] || continue
+    case "$td" in
+      */) die "refusing trailing slash tmpdir" ;;
+    esac
+    [[ "$td" == "$prefix"* ]] || continue
+    [[ -L "$td" ]] && continue
+    [[ -d "$td" ]] || continue
+    rm -rf -- "$td"
+  done
   if [[ -e "$STATE_ROOT/$team" ]]; then
     mkdir -p "$STATE_ROOT"
     local root dest
@@ -279,6 +353,7 @@ cmd_nuke() {
     case "$dest" in
       "$root"/*)
         [[ "$dest" != "$root" ]] || die "refusing rm of STATE_ROOT"
+        [[ ! -L "$STATE_ROOT" && ! -L "$STATE_ROOT/$team" ]] || die "refusing symlink state path"
         rm -rf -- "$dest"
         ;;
       *) die "state path escapes STATE_ROOT: $dest" ;;
@@ -307,6 +382,7 @@ cmd_dm() {
   # No mkdir here — missing dir must fail (never silent no-op).
   [[ -d "$inbox_dir" ]] || die "missing inboxes dir for team $team"
   local inbox="$inbox_dir/${to}.jsonl"
+  [[ ! -L "$inbox_dir" && ! -L "$inbox" ]] || die "refusing symlink inbox"
   local ts id line
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   if [[ -r /proc/sys/kernel/random/uuid ]]; then

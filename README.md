@@ -6,7 +6,7 @@ Grok Build 1.0.5 has no `teammateMode`. `spawn_subagent` is in-process (depth 1)
 
 ## M_final (cheap all-green)
 
-Cheap smoke: Godspeed unit gate + M01 + M03–M06. Nukes leftovers. Asserts operators `0`/`1`. **Does not** run M02 (`grok -p`) or M07 (ACP). `gate-all.sh` runs `gate-godspeed.sh` first, then M01+M03–M06.
+Cheap smoke: Godspeed unit gate + M01 + M03–M06 + mailbox. Nukes leftovers. Asserts operators `0`/`1`. **Does not** run M02 (`grok -p`) or M07 (ACP). `gate-all.sh` runs `gate-godspeed.sh` first, then M01+M03–M06 + `gate-mbox.sh`.
 
 ```bash
 bash scripts/gate-godspeed.sh   # expect GATE_GODSPEED_OK
@@ -43,7 +43,9 @@ bash scripts/gate-m02.sh   # expect GATE_M02_OK
 | Cleanup | `nuke --team` only; **never** `kill-server` |
 | Deny | `claude`, `TeamCreate`, `--team 0\|1` |
 | Allowlist | `^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$` |
-| State | `~/.gx-teams/<team>/config.json` + `inboxes/<name>.jsonl` |
+| State | `~/.gx-teams/<team>/config.json` + `inboxes/<name>.jsonl` (disk persist) |
+| Scratch | pane `TMPDIR=/tmp/xbgst-gx-<team>-<name>-XXXXXX`; `XBRD_SPARK_ROOT=$TMPDIR/spark`; `XBGST_MAIL_ROOT=$TMPDIR/mail`. Never JSONL bodies on `$XDG_RUNTIME_DIR`. |
+| Serde | crate `mailbox/` (`xbgst-mailbox`) append/last/gc-scratch. Live `dm` stays jq. Do **not** GC `fnm_multishells`. |
 
 ## M03 (shipped)
 

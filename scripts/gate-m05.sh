@@ -12,12 +12,15 @@ for i in $(seq 1 16); do
 done
 n=$(tmux list-panes -s -t '=gx-teams-cap' | wc -l | tr -d ' ')
 [[ "$n" == 16 ]]
+dirs_before=$(find /tmp -maxdepth 1 -name 'xbgst-gx-cap-*' -type d | wc -l | tr -d ' ')
 set +e
 "$GT" spawn --team cap --name gx-labrat-17 -- cmd true >/tmp/gx-teams-cap17.err 2>&1
 rc=$?
 set -e
 [[ $rc -ne 0 ]]
 grep -q hardcap /tmp/gx-teams-cap17.err
+dirs_after=$(find /tmp -maxdepth 1 -name 'xbgst-gx-cap-*' -type d | wc -l | tr -d ' ')
+[[ "$dirs_before" == "$dirs_after" ]]
 n=$(tmux list-panes -s -t '=gx-teams-cap' | wc -l | tr -d ' ')
 [[ "$n" == 16 ]]
 "$GT" nuke --team cap
