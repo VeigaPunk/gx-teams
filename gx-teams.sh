@@ -240,6 +240,7 @@ cmd_spawn() {
     *) die "unknown mode: $mode (want: cmd)" ;;
   esac
   [[ $# -gt 0 ]] || die "cmd requires a command"
+  command -v fnm >/dev/null 2>&1 || die "BLOCKED: fnm missing"
 
   # Keep pane alive so capture-pane finds output (scout pattern A).
   local user_cmd inner
@@ -269,11 +270,14 @@ cmd_spawn() {
     spark_root="${tmpdir}/spark"
     mkdir -m 0700 -- "$spark_root" || die "mkdir pane spark failed"
   fi
-  local qtd qmr qpath
+  local qtd qmr qhomebin
   qtd=$(printf '%q' "$tmpdir")
   qmr=$(printf '%q' "$mail_root")
-  qpath=$(printf '%q' "${HOME}/.local/bin:/usr/bin:/bin${PATH:+:$PATH}")
-  inner="export PATH=${qpath}; export TMPDIR=${qtd} XBGST_MAIL_ROOT=${qmr}"
+  qhomebin=$(printf '%q' "${HOME}/.local/bin")
+  # fnm multishells ALWAYS. Never env -i. Never GC fnm_multishells.
+  inner="eval \"\$(fnm env --shell bash)\" || { echo 'gx-teams: BLOCKED: fnm env failed' >&2; exit 1; }"
+  inner+="; export PATH=\"\${FNM_MULTISHELL_PATH:+\$FNM_MULTISHELL_PATH:}${qhomebin}:/usr/bin:/bin\${PATH:+:\$PATH}\""
+  inner+="; export TMPDIR=${qtd} XBGST_MAIL_ROOT=${qmr}"
   if [[ -n "$spark_root" ]]; then
     inner+=" XBRD_SPARK_ROOT=$(printf '%q' "$spark_root")"
   else
@@ -418,14 +422,24 @@ cmd_dm() {
   else
     id="$(date -u +%s)-$$-$RANDOM"
   fi
-  if command -v jq >/dev/null 2>&1; then
+  local mailbox=""
+  mailbox=$(command -v xbgst-mailbox 2>/dev/null || true)
+  if [[ -z "$mailbox" && -x "$SCRIPT_ROOT/mailbox/target/release/xbgst-mailbox" ]]; then
+    mailbox="$SCRIPT_ROOT/mailbox/target/release/xbgst-mailbox"
+  elif [[ -z "$mailbox" && -x "$SCRIPT_ROOT/mailbox/target/debug/xbgst-mailbox" ]]; then
+    mailbox="$SCRIPT_ROOT/mailbox/target/debug/xbgst-mailbox"
+  fi
+  # JSONL is the log. Crate is required. jq only if XBGST_MAILBOX_ALLOW_JQ=1.
+  if [[ -n "$mailbox" ]]; then
+    "$mailbox" append "$inbox" --ts "$ts" --id "$id" --from lead --to "$to" --type dm --text "$text" \
+      || die "dm write failed: $inbox"
+  elif [[ "${XBGST_MAILBOX_ALLOW_JQ:-0}" == "1" ]] && command -v jq >/dev/null 2>&1; then
     line=$(jq -nc --arg ts "$ts" --arg id "$id" --arg to "$to" --arg text "$text" \
       '{ts:$ts,id:$id,from:"lead",to:$to,type:"dm",text:$text}')
+    printf '%s\n' "$line" >>"$inbox" || die "dm write failed: $inbox"
   else
-    die "jq required for dm JSON encode"
+    die "xbgst-mailbox required for dm (XBGST_MAILBOX_ALLOW_JQ=1 for jq log fallback)"
   fi
-  # O_APPEND; print sent only if write succeeds. JSONL remains the log.
-  printf '%s\n' "$line" >>"$inbox" || die "dm write failed: $inbox"
   # Optional ACP fire: fail-fast send if a live fifo exists. Missing fifo ≠ fail.
   local fifo="$STATE_ROOT/$team/live-dm/${to}.fifo"
   if [[ -p "$fifo" ]]; then

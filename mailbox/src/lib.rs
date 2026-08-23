@@ -79,6 +79,20 @@ pub fn parse_last_line(path: &Path) -> io::Result<MailRecord> {
     serde_json::from_str(&last).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
+fn is_fnm_protected(root: &Path) -> bool {
+    let s = root.to_string_lossy();
+    if s.contains("fnm_multishells") {
+        return true;
+    }
+    if let Ok(dir) = std::env::var("FNM_DIR") {
+        let dir = PathBuf::from(dir);
+        if root == dir.as_path() || root.starts_with(&dir) {
+            return true;
+        }
+    }
+    false
+}
+
 fn is_persist_root(root: &Path) -> bool {
     if let Ok(s) = std::env::var("GX_TEAMS_STATE") {
         if root == Path::new(&s) {
@@ -99,6 +113,12 @@ pub fn gc_scratch(root: &Path, max_age: Duration) -> io::Result<usize> {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "gc_scratch refuses persist/GX_TEAMS_STATE",
+        ));
+    }
+    if is_fnm_protected(root) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "gc_scratch refuses fnm_multishells/FNM_DIR",
         ));
     }
     let meta = match fs::symlink_metadata(root) {
@@ -301,5 +321,14 @@ mod tests {
         let persist = MailRoots::from_env().persist;
         let err = gc_scratch(&persist, Duration::from_secs(1)).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
+    }
+
+    #[test]
+    fn gc_scratch_refuses_fnm_multishells_name() {
+        let dir = env::temp_dir().join(format!("fnm_multishells-refuse-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let err = gc_scratch(&dir, Duration::from_secs(1)).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
+        let _ = fs::remove_dir_all(&dir);
     }
 }
