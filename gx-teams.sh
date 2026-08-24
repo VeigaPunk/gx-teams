@@ -14,7 +14,7 @@ usage() {
 Usage:
   gx-teams.sh spawn --team <team> --name <name> -- cmd <argv...>
   gx-teams.sh nuke  --team <team>
-  gx-teams.sh dm    --team <team> --to <name> --text <text>
+  gx-teams.sh dm    --team <team> --to <name> --text <text> [--from <name>]
 EOF
 }
 
@@ -81,9 +81,18 @@ compose_godspeed_prompt() {
   printf '%s\n%s\n%s' "$directive" "$body" "$GODSPEED_SUFFIX"
 }
 
+skip_godspeed_prompt() {
+  local prompt="$1"
+  # L1 clones dispatch slash loaders. Wrapping /xbreed-team with directive.md
+  # makes grok treat the blob as a teammate oneshot instead of loading skill xbgst.
+  [[ "${GX_TEAMS_SKIP_GODSPEED:-}" == 1 ]] && return 0
+  [[ "$prompt" == /* ]] && return 0
+  return 1
+}
+
 inject_godspeed_into_grok_prompt() {
   local -n argv_ref="$1"
-  local i token grok_seen=0
+  local i token grok_seen=0 next
   for ((i = 0; i < ${#argv_ref[@]}; i++)); do
     token="${argv_ref[$i]}"
     if [[ "${token##*/}" == grok ]]; then
@@ -94,11 +103,20 @@ inject_godspeed_into_grok_prompt() {
     case "$token" in
       -p|--prompt)
         (( i + 1 < ${#argv_ref[@]} )) || die "$token requires a prompt"
-        argv_ref[$((i + 1))]=$(compose_godspeed_prompt "${argv_ref[$((i + 1))]}")
+        next="${argv_ref[$((i + 1))]}"
+        if skip_godspeed_prompt "$next"; then
+          ((i++))
+          continue
+        fi
+        argv_ref[$((i + 1))]=$(compose_godspeed_prompt "$next")
         ((i++))
         ;;
       --prompt=*)
-        argv_ref[$i]="--prompt=$(compose_godspeed_prompt "${token#--prompt=}")"
+        next="${token#--prompt=}"
+        if skip_godspeed_prompt "$next"; then
+          continue
+        fi
+        argv_ref[$i]="--prompt=$(compose_godspeed_prompt "$next")"
         ;;
     esac
   done
@@ -109,6 +127,11 @@ validate_id() {
   local kind="$1" val="$2"
   [[ -n "$val" ]] || die "$kind required"
   [[ "$val" =~ $ID_RE ]] || die "invalid $kind: $val (want $ID_RE)"
+  case "${val,,}" in
+    xask|general-purpose|explore|claude|teamcreate)
+      die "denied $kind: $val"
+      ;;
+  esac
 }
 
 refuse_operator_team() {
@@ -230,6 +253,7 @@ cmd_spawn() {
   done
   validate_id team "$team"
   validate_id name "$name"
+  [[ "${name,,}" == gx-* ]] || die "spawn name must start with gx-"
   refuse_operator_team "$team"
   [[ $# -gt 0 ]] || die "spawn requires -- <mode> <argv...>"
 
@@ -300,6 +324,18 @@ cmd_spawn() {
     -e "TMPDIR=${tmpdir}"
     -e "XBGST_MAIL_ROOT=${mail_root}"
   )
+  # Clone script: GX_L1=1 and role empty. Never mint L1 from a specialist parent.
+  # tmux inherits parent env; env -u strips L1/role at exec so /proc/pid/environ
+  # cannot keep a spoofed GX_L1=1 next to GX_XBGST_ROLE=specialist.
+  local -a pane_cmd=(env)
+  if [[ "${GX_L1:-}" == "1" && -z "${GX_XBGST_ROLE:-}" ]]; then
+    id_env+=(-e "GX_L1=1")
+    pane_cmd+=(-u GX_XBGST_ROLE)
+  else
+    id_env+=(-e "GX_XBGST_ROLE=specialist")
+    pane_cmd+=(-u GX_L1)
+  fi
+  pane_cmd+=(bash -c "$inner")
   if [[ -n "$spark_root" ]]; then
     id_env+=(-e "XBRD_SPARK_ROOT=${spark_root}")
   fi
@@ -310,7 +346,7 @@ cmd_spawn() {
       -F '#{window_id} #{pane_id} #{pane_pid}' \
       -n "$name" \
       "${id_env[@]}" \
-      -- bash -c "$inner")
+      -- "${pane_cmd[@]}")
     pane=$(awk '{print $2}' <<<"$meta")
     pid=$(awk '{print $3}' <<<"$meta")
   else
@@ -319,7 +355,7 @@ cmd_spawn() {
       -F '#{session_name} #{session_id} #{window_id} #{pane_id} #{pane_pid}' \
       -s "$S" -n "$name" -x 80 -y 24 \
       "${id_env[@]}" \
-      -- bash -c "$inner")
+      -- "${pane_cmd[@]}")
     pane=$(awk '{print $4}' <<<"$meta")
     pid=$(awk '{print $5}' <<<"$meta")
   fi
@@ -351,6 +387,12 @@ cmd_nuke() {
   done
   validate_id team "$team"
   refuse_operator_team "$team"
+  if [[ "${GX_XBGST_ROLE:-}" == "specialist" ]]; then
+    die "nuke refused: specialist role"
+  fi
+  if [[ -n "${GX_TEAMMATE_NAME:-}" && "${GX_L1:-}" != "1" ]]; then
+    die "nuke refused: teammate"
+  fi
   local S T cfg
   S=$(session_name "$team")
   T=$(starget "$S")
@@ -421,13 +463,14 @@ cmd_nuke() {
 }
 
 cmd_dm() {
-  local team="" to="" text=""
-  local have_text=0
+  local team="" to="" text="" from=""
+  local have_text=0 have_from=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --team) team="${2:-}"; shift 2 ;;
       --to) to="${2:-}"; shift 2 ;;
       --text) text="${2:-}"; have_text=1; shift 2 ;;
+      --from) from="${2:-}"; have_from=1; shift 2 ;;
       -h|--help) usage; exit 0 ;;
       *) die "unknown dm arg: $1" ;;
     esac
@@ -436,6 +479,15 @@ cmd_dm() {
   validate_id name "$to"
   refuse_operator_team "$team"
   (( have_text )) || die "dm requires --text"
+  # GX_TEAMMATE_NAME is pane identity and always wins; CLI --from is harness-only.
+  if [[ -n "${GX_TEAMMATE_NAME:-}" ]]; then
+    from="$GX_TEAMMATE_NAME"
+    validate_id from "$from"
+  elif (( have_from )); then
+    validate_id from "$from"
+  else
+    from="lead"
+  fi
   local inbox_dir="$STATE_ROOT/$team/inboxes"
   # No mkdir here — missing dir must fail (never silent no-op).
   [[ -d "$inbox_dir" ]] || die "missing inboxes dir for team $team"
@@ -457,11 +509,11 @@ cmd_dm() {
   fi
   # JSONL is the log. Crate is required. jq only if XBGST_MAILBOX_ALLOW_JQ=1.
   if [[ -n "$mailbox" ]]; then
-    "$mailbox" append "$inbox" --ts "$ts" --id "$id" --from lead --to "$to" --type dm --text "$text" \
+    "$mailbox" append "$inbox" --ts "$ts" --id "$id" --from "$from" --to "$to" --type dm --text "$text" \
       || die "dm write failed: $inbox"
   elif [[ "${XBGST_MAILBOX_ALLOW_JQ:-0}" == "1" ]] && command -v jq >/dev/null 2>&1; then
-    line=$(jq -nc --arg ts "$ts" --arg id "$id" --arg to "$to" --arg text "$text" \
-      '{ts:$ts,id:$id,from:"lead",to:$to,type:"dm",text:$text}')
+    line=$(jq -nc --arg ts "$ts" --arg id "$id" --arg from "$from" --arg to "$to" --arg text "$text" \
+      '{ts:$ts,id:$id,from:$from,to:$to,type:"dm",text:$text}')
     printf '%s\n' "$line" >>"$inbox" || die "dm write failed: $inbox"
   else
     die "xbgst-mailbox required for dm (XBGST_MAILBOX_ALLOW_JQ=1 for jq log fallback)"

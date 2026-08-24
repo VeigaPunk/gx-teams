@@ -11,7 +11,7 @@ Cheap smoke: Godspeed unit gate + M01 + M03–M06 + mailbox. Nukes leftovers. As
 ```bash
 bash scripts/gate-godspeed.sh   # expect GATE_GODSPEED_OK
 bash scripts/gate-all.sh        # expect GX-TEAMS-GATE-OK
-./gx-teams.sh --help            # lists spawn / nuke / dm
+./gx-teams.sh --help            # lists spawn / nuke / dm [--from]
 ```
 
 ## M01 (shipped)
@@ -38,10 +38,10 @@ bash scripts/gate-m02.sh   # expect GATE_M02_OK
 | Session | `gx-teams-<team>`, created with `new-session -d -s` (**never** `-t`, that is a session group) |
 | Target | exact `-t =gx-teams-<team>` (tmux prefix-matches without `=`) |
 | Pane handle | `#{pane_id}` (`%N`). **Never** `:0.0` |
-| Identity | env `GX_TEAM`, `GX_TEAMMATE_NAME`, `GX_TEAMMATE_ID=name@team`, `GX_PARENT_SESSION=<tmux session name>` — **not** pane title / `%N` |
+| Identity | env `GX_TEAM`, `GX_TEAMMATE_NAME`, `GX_TEAMMATE_ID=name@team`, `GX_PARENT_SESSION=<tmux session name>` — **not** pane title / `%N`. Spawn sets `GX_XBGST_ROLE=specialist` unless parent is clone (`GX_L1=1` and role empty → `-e GX_L1=1` only; never forward L1 from a specialist parent). `GX_TEAMMATE_NAME` always wins over `dm --from` (CLI `--from` is harness-only when env unset; else `lead`; `ID_RE`) |
 | Hardcap | 16 panes / session |
 | Cleanup | `nuke --team` only; **never** `kill-server` |
-| Deny | `claude`, `TeamCreate`, `--team 0\|1` |
+| Deny | `claude`, `TeamCreate`, `--team 0\|1`; names `xask`/`general-purpose`/`explore`/`claude`/`TeamCreate` (case-insensitive); spawn `--name` requires `gx-` prefix. `nuke` dies if `GX_XBGST_ROLE=specialist`, or if `GX_TEAMMATE_NAME` is set and `GX_L1` is not `1` |
 | Allowlist | `^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$` |
 | State | `~/.gx-teams/<team>/config.json` + `inboxes/<name>.jsonl` (disk persist) |
 | Scratch | pane `TMPDIR=/tmp/xbgst-gx-<team>-<name>-XXXXXX`; `XBGST_MAIL_ROOT=$TMPDIR/mail`. `XBRD_SPARK_ROOT=$TMPDIR/spark` **only** when argv has `--spark`/`--spk`/`--substrate sekhmet`/`sekhmet`. PATH includes `~/.local/bin` so `xask` reaches grok/kimi/qwen/stock cdx. Never JSONL bodies on `$XDG_RUNTIME_DIR`. |
@@ -61,6 +61,7 @@ Mailbox is a JSONL **log** (O_APPEND). `dm` prints `sent` only if write succeeds
 
 ```bash
 ./gx-teams.sh dm --team mail --to gx-labrat-ping --text hi
+./gx-teams.sh dm --team mail --to gx-labrat-ping --from gx-executor-m03 --text hi
 bash scripts/gate-m04.sh   # expect GATE_M04_OK
 ```
 
