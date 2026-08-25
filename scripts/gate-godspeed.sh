@@ -85,6 +85,22 @@ PY
 }
 inject_local "$resolved"
 
+# cursor-agent -p is boolean; prompt lives after --. --trust must stay intact.
+argv=(cursor-agent -p --trust -- hello)
+inject_godspeed_into_grok_prompt argv
+[[ "${argv[2]}" == "--trust" ]]
+PROMPT="${argv[-1]}" python3 - "$resolved" <<'PY'
+import os, pathlib, sys
+directive = pathlib.Path(sys.argv[1]).read_bytes()
+prompt = os.environ["PROMPT"].encode()
+assert prompt == directive + b"\nhello\n| godspeed"
+PY
+
+# kimi-code hard skip — argv must be byte-identical
+argv=(kimi -m kimi-code/k3 -p 'naked kimi')
+inject_godspeed_into_grok_prompt argv
+[[ "${argv[-1]}" == "naked kimi" ]]
+
 python3 - "$ROOT/scripts/acp-live-dm.py" "$resolved" <<'PY'
 import importlib.util
 import pathlib

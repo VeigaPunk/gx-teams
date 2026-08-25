@@ -90,33 +90,87 @@ skip_godspeed_prompt() {
   return 1
 }
 
+godspeed_cli_basename() {
+  printf '%s' "${1##*/}"
+}
+
+godspeed_cli_is_kimi() {
+  case "$(godspeed_cli_basename "$1")" in
+    kimi|kimi-code) return 0 ;;
+  esac
+  return 1
+}
+
+# Rewrite prompt-bearing flags for installed CLIs except kimi-code.
+# Name kept for gate-godspeed.sh / spawn call sites.
+# grok -p takes a value; cursor-agent -p is a boolean oneshot flag (prompt after --).
 inject_godspeed_into_grok_prompt() {
   local -n argv_ref="$1"
-  local i token grok_seen=0 next
+  local i token next cli=""
+  for ((i = 0; i < ${#argv_ref[@]}; i++)); do
+    if godspeed_cli_is_kimi "${argv_ref[$i]}"; then
+      return 0
+    fi
+  done
   for ((i = 0; i < ${#argv_ref[@]}; i++)); do
     token="${argv_ref[$i]}"
-    if [[ "${token##*/}" == grok ]]; then
-      grok_seen=1
-      continue
-    fi
-    (( grok_seen )) || continue
+    case "$(godspeed_cli_basename "$token")" in
+      grok|grok-titanium) cli=grok ;;
+      cursor-agent) cli=cursor ;;
+      sekhmet) cli=sekhmet ;;
+      codex) cli=codex ;;
+      xbreed|almanack|prime-agent) cli=dashdash ;;
+    esac
+    [[ -n "$cli" ]] || continue
     case "$token" in
-      -p|--prompt)
+      --prompt=*)
+        [[ "$cli" == grok || "$cli" == dashdash ]] || continue
+        next="${token#--prompt=}"
+        skip_godspeed_prompt "$next" && continue
+        argv_ref[$i]="--prompt=$(compose_godspeed_prompt "$next")"
+        ;;
+      --task=*)
+        [[ "$cli" == sekhmet ]] || continue
+        next="${token#--task=}"
+        skip_godspeed_prompt "$next" && continue
+        argv_ref[$i]="--task=$(compose_godspeed_prompt "$next")"
+        ;;
+    esac
+  done
+  cli=""
+  for ((i = 0; i < ${#argv_ref[@]}; i++)); do
+    token="${argv_ref[$i]}"
+    case "$(godspeed_cli_basename "$token")" in
+      grok|grok-titanium) cli=grok ; continue ;;
+      cursor-agent) cli=cursor ; continue ;;
+      sekhmet) cli=sekhmet ; continue ;;
+      codex) cli=codex ; continue ;;
+      xbreed|almanack|prime-agent) cli=dashdash ; continue ;;
+    esac
+    [[ -n "$cli" ]] || continue
+    case "$cli:$token" in
+      grok:-p|grok:--prompt)
         (( i + 1 < ${#argv_ref[@]} )) || die "$token requires a prompt"
         next="${argv_ref[$((i + 1))]}"
-        if skip_godspeed_prompt "$next"; then
-          ((i++))
-          continue
+        if ! skip_godspeed_prompt "$next"; then
+          argv_ref[$((i + 1))]=$(compose_godspeed_prompt "$next")
         fi
-        argv_ref[$((i + 1))]=$(compose_godspeed_prompt "$next")
         ((i++))
         ;;
-      --prompt=*)
-        next="${token#--prompt=}"
-        if skip_godspeed_prompt "$next"; then
-          continue
+      sekhmet:--task)
+        (( i + 1 < ${#argv_ref[@]} )) || die "$token requires a prompt"
+        next="${argv_ref[$((i + 1))]}"
+        if ! skip_godspeed_prompt "$next"; then
+          argv_ref[$((i + 1))]=$(compose_godspeed_prompt "$next")
         fi
-        argv_ref[$i]="--prompt=$(compose_godspeed_prompt "$next")"
+        ((i++))
+        ;;
+      cursor:--|dashdash:--|codex:--)
+        (( i + 1 < ${#argv_ref[@]} )) || continue
+        next="${argv_ref[$((i + 1))]}"
+        skip_godspeed_prompt "$next" && continue
+        argv_ref[$((i + 1))]=$(compose_godspeed_prompt "$next")
+        ((i++))
         ;;
     esac
   done
