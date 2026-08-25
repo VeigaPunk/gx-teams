@@ -67,7 +67,7 @@ bash scripts/gate-m04.sh   # expect GATE_M04_OK
 
 ## M05 (shipped)
 
-Hardcap 16: 16×`cmd true`, 17th fails with `hardcap`, nuke `cap`, operators `0`/`1` pane_id:pid frozen.
+Hardcap 64: 64×`cmd true`, 65th fails with `hardcap`, nuke `cap`, operators `0`/`1` pane_id:pid frozen.
 
 ```bash
 bash scripts/gate-m05.sh   # expect GATE_M05_OK
